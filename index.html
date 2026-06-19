@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>お見積書 - 便利屋あいのて</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF生成ライブラリ (不要なxintegrityを削除し、安全に読み込めるように修正) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        /* 基本のトランジション */
+        input, textarea { transition: all 0.2s ease; }
+        input:focus, textarea:focus { outline: 2px solid #3b82f6; background-color: #f0f9ff; }
+        
+        /* -------------------------------------
+           PDF出力時のクリーンなスタイル
+        -------------------------------------- */
+        .pdf-generating {
+            background-color: white !important;
+            padding: 40px !important;
+            /* A4相当の幅に固定 */
+            width: 800px !important;
+            max-width: 800px !important;
+            min-width: 800px !important;
+            /* 【追加】A4の1ページに強制的に収め、不要な2枚目を防ぐ */
+            max-height: 1120px !important;
+            overflow: hidden !important;
+            margin: 0 auto !important;
+            box-shadow: none !important;
+        }
+        .pdf-generating input[type="text"], 
+        .pdf-generating input[type="number"], 
+        .pdf-generating input[type="date"], 
+        .pdf-generating textarea {
+            border: none !important;
+            background-color: transparent !important;
+            box-shadow: none !important;
+            resize: none !important;
+        }
+        .pdf-generating input:placeholder-shown, 
+        .pdf-generating textarea:placeholder-shown {
+            color: transparent !important;
+        }
+        .pdf-generating .no-print {
+            display: none !important;
+        }
+    </style>
+
+    <!-- スマホ表示用のスタイル -->
+    <style id="responsive-style">
+        @media screen and (max-width: 768px) {
+            .res-flex-col { flex-direction: column !important; }
+            .res-w-full { width: 100% !important; padding-right: 0 !important; }
+            .res-mt-company { margin-top: 1.5rem !important; }
+            .res-mb-remarks { margin-bottom: 1.5rem !important; }
+            
+            .res-text-title { font-size: 1.5rem !important; }
+            .res-text-name { font-size: 1.25rem !important; line-height: 1.2 !important; }
+            .res-text-total { font-size: 1.5rem !important; }
+            .res-text-sm { font-size: 0.75rem !important; }
+            .res-text-base { font-size: 1rem !important; }
+            
+            table.responsive-table, 
+            table.responsive-table thead, 
+            table.responsive-table tbody, 
+            table.responsive-table th, 
+            table.responsive-table td, 
+            table.responsive-table tr { 
+                display: block; 
+                width: 100%;
+            }
+            table.responsive-table thead tr { 
+                position: absolute; top: -9999px; left: -9999px; 
+            }
+            table.responsive-table tr.item-row { 
+                border: 1px solid #cbd5e1; 
+                border-radius: 0.5rem; 
+                margin-bottom: 1rem; 
+                padding: 1rem; 
+                background-color: #ffffff;
+                position: relative;
+                box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            }
+            table.responsive-table td { 
+                border: none !important; 
+                position: relative; 
+                padding: 0.5rem 0 0.5rem 30% !important; 
+                text-align: right; 
+                min-height: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+            }
+            table.responsive-table td:before { 
+                content: attr(data-label); 
+                position: absolute; 
+                left: 0; 
+                width: 30%; 
+                text-align: left; 
+                font-weight: 600; 
+                color: #475569; 
+                font-size: 0.875rem;
+                top: 50%;
+                transform: translateY(-50%);
+            }
+            table.responsive-table td input {
+                text-align: right;
+                background-color: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 0.25rem;
+                padding: 0.25rem 0.5rem;
+            }
+            table.responsive-table td.no-label:before { content: none; }
+            table.responsive-table td.no-label { padding-left: 0 !important; }
+            
+            .delete-btn-cell {
+                position: absolute;
+                top: 0.5rem;
+                right: 0.5rem;
+                padding: 0 !important;
+                width: auto !important;
+                min-height: auto !important;
+            }
+            .item-row .opacity-0 { opacity: 1 !important; }
+            .yen-mark { display: none; }
+        }
+    </style>
+</head>
+<body class="bg-gray-200 text-gray-800 font-sans p-2 md:p-8 min-h-screen">
+
+    <div class="fixed bottom-4 right-4 md:top-4 md:right-8 md:bottom-auto z-50 no-print">
+        <!-- クリック時の関数を showConfirmModal に変更 -->
+        <button onclick="showConfirmModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg flex items-center transition-transform active:scale-95">
+            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            PDFを保存
+        </button>
+    </div>
+
+    <!-- ドキュメント切り替えタブ -->
+    <div class="max-w-[210mm] mx-auto flex space-x-1 no-print">
+        <button onclick="changeDocType('見積書')" id="btn-見積書" class="px-4 md:px-8 py-2 md:py-3 rounded-t-lg font-bold transition-colors doc-tab bg-white text-blue-600 border-t-4 border-t-blue-600 border-l border-r border-gray-200 shadow-sm">見積書</button>
+        <button onclick="changeDocType('請求書')" id="btn-請求書" class="px-4 md:px-8 py-2 md:py-3 rounded-t-lg font-bold transition-colors doc-tab bg-gray-100 text-gray-500 hover:bg-gray-50 border border-gray-200">請求書</button>
+        <button onclick="changeDocType('領収書')" id="btn-領収書" class="px-4 md:px-8 py-2 md:py-3 rounded-t-lg font-bold transition-colors doc-tab bg-gray-100 text-gray-500 hover:bg-gray-50 border border-gray-200">領収書</button>
+    </div>
+
+    <div id="invoice-container" class="bg-white w-full max-w-[210mm] mx-auto min-h-[297mm] p-8 shadow-xl relative rounded-tr-lg rounded-b-lg">
+        
+        <div class="text-center mb-10">
+            <h1 id="documentTitle" class="res-text-title text-3xl font-bold tracking-widest border-b-2 border-gray-800 inline-block pb-1 px-8">御 見 積 書</h1>
+        </div>
+
+        <div class="res-flex-col flex justify-between mb-8">
+            <div class="res-w-full w-1/2 pr-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-end mb-2 border-b border-gray-400 pb-1">
+                        <input type="text" placeholder="お客様名" class="res-text-name w-full text-2xl font-bold bg-gray-50 border border-transparent rounded p-1">
+                        <span class="res-text-name text-2xl font-bold ml-2 whitespace-nowrap">様</span>
+                    </div>
+                    <p id="docMessage" class="res-text-sm text-sm text-gray-600 mt-2">下記の通りお見積り申し上げます。</p>
+                </div>
+                
+                <div class="mt-6">
+                    <p id="totalLabel" class="res-text-sm text-sm text-gray-600 mb-1">お見積り金額 (税込)</p>
+                    <div class="flex items-center border-b-2 border-gray-800 pb-1">
+                        <span class="res-text-total text-2xl font-bold mr-2">¥</span>
+                        <!-- readonly 属性を削除し、手入力できるように変更しました -->
+                        <input type="text" id="grandTotalHeader" class="res-text-total text-3xl font-bold w-full bg-transparent border-none outline-none text-right" value="0">
+                        <span class="res-text-total text-xl font-bold ml-2">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="res-w-full res-mt-company w-2/5 text-sm">
+                <div class="flex justify-end mb-2 items-center">
+                    <span class="mr-2">発行日:</span>
+                    <input type="date" id="issueDate" class="border border-gray-200 rounded px-1 bg-gray-50 py-1">
+                </div>
+                <div class="flex justify-end mb-4 items-center">
+                    <span id="noLabel" class="mr-2">見積No:</span>
+                    <!-- id="documentNo" を追加 -->
+                    <input type="text" id="documentNo" placeholder="20260619-01" class="border border-gray-200 rounded px-1 w-32 bg-gray-50 text-right py-1">
+                </div>
+
+                <div class="border border-gray-300 p-3 rounded bg-gray-50">
+                    <input type="text" class="res-text-base w-full font-bold text-lg bg-transparent border-none outline-none mb-1" value="便利屋あいのて">
+                    <input type="text" class="w-full bg-transparent border-none outline-none" value="〒910-0034">
+                    <input type="text" class="w-full bg-transparent border-none outline-none" value="福井県福井市菅谷２-１">
+                    <div class="flex mt-1 items-center">
+                        <span class="w-10 text-gray-500">TEL:</span>
+                        <input type="text" class="w-full bg-transparent border-none outline-none" value="0776-27-2340">
+                    </div>
+                    <div class="flex mt-1 items-center">
+                        <span class="w-10 text-gray-500">Email:</span>
+                        <input type="text" class="w-full bg-transparent border-none outline-none" value="ainote291@gmail.com">
+                    </div>
+                    <div class="flex mt-1 items-center">
+                        <span class="w-16 text-gray-500 res-text-sm text-xs">登録番号:</span>
+                        <input type="text" placeholder="T0000000000000" class="w-full bg-transparent border-none outline-none res-text-sm text-xs">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-8 relative">
+            <table class="responsive-table w-full border-collapse border border-gray-800 text-sm">
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="border border-gray-800 p-2 w-10 text-center no-print">操作</th>
+                        <th class="border border-gray-800 p-2 text-left">適用・品名（作業内容）</th>
+                        <th class="border border-gray-800 p-2 w-20 text-center">数量</th>
+                        <th class="border border-gray-800 p-2 w-20 text-center">単位</th>
+                        <th class="border border-gray-800 p-2 w-28 text-right">単価</th>
+                        <th class="border border-gray-800 p-2 w-32 text-right">金額</th>
+                    </tr>
+                </thead>
+                <tbody id="invoiceItems">
+                </tbody>
+            </table>
+            
+            <div class="no-print mt-4 text-center md:text-right">
+                <button onclick="addRow()" class="text-sm bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 py-2 px-6 rounded-full shadow-sm w-full md:w-auto inline-flex justify-center items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    明細行を追加
+                </button>
+            </div>
+        </div>
+
+        <div class="res-flex-col flex justify-between items-start">
+            <div class="res-w-full res-mb-remarks w-1/2 pr-6">
+                <h3 class="font-bold border-b border-gray-800 mb-2 res-text-base text-base">備考・特記事項</h3>
+                <textarea rows="6" class="w-full border border-transparent rounded p-2 bg-gray-50 resize-y res-text-sm text-sm" placeholder="・作業予定日時：&#13;&#10;・お支払条件：作業完了後、現金にてお支払い&#13;&#10;・有効期限：お見積り日より1ヶ月&#13;&#10;・別途処分費等の実費がかかる場合は事前にご相談いたします。"></textarea>
+            </div>
+            
+            <div class="res-w-full w-2/5">
+                <table class="w-full border-collapse border border-gray-800 text-sm">
+                    <tr>
+                        <th class="border border-gray-800 p-2 text-left bg-gray-100 w-1/2">小計</th>
+                        <td class="border border-gray-800 p-2 text-right font-bold bg-white w-1/2">
+                            ¥ <span id="subTotal">0</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th class="border border-gray-800 p-2 text-left bg-gray-100">消費税 (10%)</th>
+                        <td class="border border-gray-800 p-2 text-right bg-white">
+                            ¥ <span id="taxTotal">0</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th class="border border-gray-800 p-2 text-left bg-gray-200 res-text-base text-lg">合計金額</th>
+                        <td class="border border-gray-800 p-2 text-right font-bold res-text-base text-lg bg-white">
+                            ¥ <span id="grandTotal">0</span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <div class="mt-12 text-center res-text-sm text-xs text-gray-500">
+            <p>※本お見積書の内容に関してご不明な点がございましたら、お気軽にお問い合わせください。</p>
+        </div>
+    </div>
+
+    <!-- ローディング表示 -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-[100] hidden flex-col justify-center items-center text-white">
+        <svg class="animate-spin h-10 w-10 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="font-bold">PDFを作成しています...</p>
+        <p class="text-sm mt-2">少々お待ちください</p>
+    </div>
+
+    <!-- ダウンロード確認用ポップアップ（モーダル） -->
+    <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 z-[110] hidden flex-col justify-center items-center no-print px-4">
+        <div class="bg-white p-6 rounded-lg shadow-2xl max-w-sm w-full transform transition-all">
+            <h3 class="text-lg font-bold mb-3 text-gray-800 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                PDF保存の確認
+            </h3>
+            <p class="mb-4 text-sm text-gray-600">この内容でPDFを作成し、ダウンロードしますか？</p>
+            <div class="bg-blue-50 p-3 rounded mb-6 text-xs text-blue-800 border border-blue-100">
+                <p>※保存完了後、次の書類作成のために<strong>番号（No）が自動的にカウントアップ</strong>されます。</p>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeConfirmModal()" class="px-4 py-2 bg-gray-100 text-gray-700 font-bold rounded hover:bg-gray-200 transition-colors">キャンセル</button>
+                <button onclick="executeDownload()" class="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700 transition-colors flex items-center">
+                    はい、保存します
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('issueDate').valueAsDate = new Date();
+
+        // 初期ロード時に、今日の日付を元にした番号をセットする
+        function setDefaultDocumentNo() {
+            const dateStr = document.getElementById('issueDate').value.replace(/-/g, '');
+            document.getElementById('documentNo').value = `${dateStr}-01`;
+        }
+
+        let currentDocType = '見積書';
+
+        function changeDocType(type) {
+            currentDocType = type;
+            
+            const titleElement = document.getElementById('documentTitle');
+            const messageElement = document.getElementById('docMessage');
+            const totalLabelElement = document.getElementById('totalLabel');
+            const noLabelElement = document.getElementById('noLabel');
+
+            if (type === '見積書') {
+                titleElement.textContent = '御 見 積 書';
+                messageElement.textContent = '下記の通りお見積り申し上げます。';
+                totalLabelElement.textContent = 'お見積り金額 (税込)';
+                noLabelElement.textContent = '見積No:';
+            } else if (type === '請求書') {
+                titleElement.textContent = '御 請 求 書';
+                messageElement.textContent = '下記の通りご請求申し上げます。';
+                totalLabelElement.textContent = 'ご請求金額 (税込)';
+                noLabelElement.textContent = '請求No:';
+            } else if (type === '領収書') {
+                titleElement.textContent = '領 収 書';
+                messageElement.textContent = '下記の通り領収いたしました。';
+                totalLabelElement.textContent = '領収金額 (税込)';
+                noLabelElement.textContent = '領収No:';
+            }
+
+            // タブのスタイリングを更新
+            document.querySelectorAll('.doc-tab').forEach(btn => {
+                if (btn.id === `btn-${type}`) {
+                    btn.className = 'px-4 md:px-8 py-2 md:py-3 rounded-t-lg font-bold transition-colors doc-tab bg-white text-blue-600 border-t-4 border-t-blue-600 border-l border-r border-gray-200 shadow-sm';
+                } else {
+                    btn.className = 'px-4 md:px-8 py-2 md:py-3 rounded-t-lg font-bold transition-colors doc-tab bg-gray-100 text-gray-500 hover:bg-gray-50 border border-gray-200';
+                }
+            });
+        }
+
+        function createRowHTML() {
+            return `
+                <tr class="item-row group border-b border-gray-800">
+                    <td class="delete-btn-cell border-r border-gray-800 p-1 text-center no-print no-label">
+                        <button onclick="removeRow(this)" class="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-red-50 rounded-full" title="削除">
+                            <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </td>
+                    <td data-label="内容" class="border-r border-gray-800 p-0">
+                        <input type="text" class="w-full h-full p-2 border-none outline-none bg-transparent" placeholder="作業内容や品名を入力" oninput="calculate()">
+                    </td>
+                    <td data-label="数量" class="border-r border-gray-800 p-0">
+                        <input type="number" class="qty w-full h-full p-2 border-none outline-none text-center bg-transparent" min="0" step="0.5" placeholder="1" oninput="calculate()">
+                    </td>
+                    <td data-label="単位" class="border-r border-gray-800 p-0">
+                        <input type="text" class="w-full h-full p-2 border-none outline-none text-center bg-transparent" placeholder="式/人/台" list="units">
+                    </td>
+                    <td data-label="単価" class="border-r border-gray-800 p-0 relative">
+                        <span class="yen-mark absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 no-print text-xs">¥</span>
+                        <input type="number" class="price w-full h-full p-2 pl-6 border-none outline-none text-right bg-transparent" min="0" step="100" placeholder="0" oninput="calculate()">
+                    </td>
+                    <td data-label="金額" class="p-2 text-right bg-transparent font-normal border-t-0">
+                        ¥ <span class="row-total font-mono text-gray-800">0</span>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function addRow() {
+            document.getElementById('invoiceItems').insertAdjacentHTML('beforeend', createRowHTML());
+        }
+
+        function removeRow(btn) {
+            const tbody = document.getElementById('invoiceItems');
+            if (tbody.children.length > 1) {
+                btn.closest('tr').remove();
+                calculate();
+            } else {
+                alert('最低1行は必要です。');
+            }
+        }
+
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        function calculate() {
+            let subTotal = 0;
+            document.querySelectorAll('.item-row').forEach(row => {
+                const qty = parseFloat(row.querySelector('.qty').value) || 0;
+                const price = parseFloat(row.querySelector('.price').value) || 0;
+                const rowTotal = Math.floor(qty * price);
+                row.querySelector('.row-total').textContent = formatNumber(rowTotal);
+                subTotal += rowTotal;
+            });
+            const taxTotal = Math.floor(subTotal * 0.1);
+            const grandTotal = subTotal + taxTotal;
+            
+            document.getElementById('subTotal').textContent = formatNumber(subTotal);
+            document.getElementById('taxTotal').textContent = formatNumber(taxTotal);
+            document.getElementById('grandTotal').textContent = formatNumber(grandTotal);
+            document.getElementById('grandTotalHeader').value = formatNumber(grandTotal);
+        }
+
+        // --- モーダル制御 ---
+        function showConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // --- 番号自動カウントアップ処理 ---
+        function incrementDocumentNo() {
+            const noInput = document.getElementById('documentNo');
+            let currentNo = noInput.value;
+            
+            if (!currentNo) {
+                // 空の場合はデフォルトをセット
+                setDefaultDocumentNo();
+                return;
+            }
+
+            // 末尾の連続する数字を正規表現で探し出す
+            const match = currentNo.match(/(\d+)$/);
+            if (match) {
+                const numStr = match[1]; // 例: "01" や "123"
+                const numLen = numStr.length; // 桁数を記憶（ゼロ埋め維持のため）
+                const nextNum = parseInt(numStr, 10) + 1; // +1する
+                // 元の桁数でゼロ埋めして戻す
+                const paddedNextNum = nextNum.toString().padStart(numLen, '0');
+                // 文字列の末尾を新しい数字に置き換える
+                noInput.value = currentNo.slice(0, -numLen) + paddedNextNum;
+            } else {
+                // 数字で終わっていない特殊な番号の場合は、末尾に-01を付ける
+                noInput.value = currentNo + '-01';
+            }
+        }
+
+        // --- PDF生成・ダウンロード実行 ---
+        async function executeDownload() {
+            // モーダルを閉じる
+            closeConfirmModal();
+
+            const element = document.getElementById('invoice-container');
+            const overlay = document.getElementById('loadingOverlay');
+            const responsiveStyle = document.getElementById('responsive-style');
+            
+            // 撮影前に必ず画面のトップに強制移動させます。
+            window.scrollTo(0, 0);
+            
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            
+            // スマホ用スタイルを遮断
+            responsiveStyle.disabled = true;
+            element.classList.add('pdf-generating');
+
+            // レイアウト変更が確実に反映されるのを待つ
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const opt = {
+                margin:       [10, 0, 10, 0], // mm単位の余白
+                filename:     `${currentDocType}_あいのて_${document.getElementById('documentNo').value}.pdf`, // ファイル名にもNoを反映
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { 
+                    scale: 2, 
+                    useCORS: true, 
+                    windowWidth: 850, 
+                    width: 850,
+                    scrollY: 0,
+                    scrollX: 0
+                }, 
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            try {
+                // Blobデータとして生成し、一時リンクを作ってダウンロードさせる方式
+                const worker = html2pdf().set(opt).from(element);
+                const pdfBlob = await worker.output('blob');
+                
+                // 一時的なダウンロードリンクの作成と実行
+                const url = URL.createObjectURL(pdfBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = opt.filename;
+                document.body.appendChild(a);
+                a.click();
+                
+                // 後処理
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                // 【新規追加】ダウンロード完了後に番号を自動でカウントアップする
+                incrementDocumentNo();
+                
+            } catch (error) {
+                console.error("PDF生成エラー:", error);
+                alert("PDFの作成に失敗しました。");
+            } finally {
+                element.classList.remove('pdf-generating');
+                responsiveStyle.disabled = false;
+                
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        }
+
+        window.onload = () => {
+            document.getElementById('issueDate').valueAsDate = new Date();
+            // 初期ロード時にデフォルト番号をセット
+            setDefaultDocumentNo();
+
+            const datalist = document.createElement('datalist');
+            datalist.id = 'units';
+            ['式', '人', '時間', '台', '個', '枚', '坪', 'm'].forEach(unit => {
+                const option = document.createElement('option');
+                option.value = unit;
+                datalist.appendChild(option);
+            });
+            document.body.appendChild(datalist);
+
+            const defaultItems = [
+                { name: "作業スタッフ（基本料金）", qty: 2, unit: "人", price: 3000 },
+                { name: "作業費（追加時間）", qty: 4, unit: "時間", price: 2500 },
+                { name: "車両費（軽トラ）", qty: 1, unit: "台", price: 5000 },
+                { name: "不用品処分代行費", qty: 1, unit: "式", price: 8000 },
+                { name: "出張費（福井市内）", qty: 1, unit: "式", price: 2000 }
+            ];
+
+            const tbody = document.getElementById('invoiceItems');
+            defaultItems.forEach(item => {
+                tbody.insertAdjacentHTML('beforeend', createRowHTML());
+                const lastRow = tbody.lastElementChild;
+                lastRow.querySelector('input[type="text"]').value = item.name;
+                lastRow.querySelector('.qty').value = item.qty;
+                lastRow.querySelector('input[list="units"]').value = item.unit;
+                lastRow.querySelector('.price').value = item.price;
+            });
+            calculate();
+        };
+    </script>
+</body>
+</html>
