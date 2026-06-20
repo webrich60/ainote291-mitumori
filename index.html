@@ -16,14 +16,16 @@
         /* PDF出力時のクリーンなスタイル */
         .pdf-generating {
             background-color: white !important;
-            padding: 40px !important;
-            width: 800px !important;
-            max-width: 800px !important;
-            min-width: 800px !important;
-            max-height: 1120px !important;
+            padding: 40px !important; 
+            width: 794px !important;
+            max-width: 794px !important;
+            min-width: 794px !important;
+            height: 1122px !important;
+            max-height: 1122px !important;
             overflow: hidden !important;
-            margin: 0 auto !important;
+            margin: 0 !important;
             box-shadow: none !important;
+            border-radius: 0 !important; 
         }
         .pdf-generating input[type="text"], 
         .pdf-generating input[type="number"], 
@@ -42,7 +44,6 @@
             display: none !important;
         }
 
-        /* トースト通知用 */
         #toast {
             transition: opacity 0.3s ease-in-out;
         }
@@ -152,7 +153,6 @@
             <button onclick="changeDocType('領収書')" id="btn-領収書" class="px-4 md:px-6 py-2 rounded-t-lg font-bold transition-colors doc-tab bg-gray-100 text-gray-500 hover:bg-gray-50 border border-gray-200 whitespace-nowrap">領収書</button>
         </div>
         
-        <!-- 【追加】クラウド保存・データ読込ボタン -->
         <div class="flex space-x-2 w-full md:w-auto justify-end">
             <button onclick="saveData()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow-sm text-sm transition-colors flex items-center active:scale-95">
                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
@@ -186,7 +186,8 @@
                     <p id="totalLabel" class="res-text-sm text-sm text-gray-600 mb-1">お見積り金額 (税込)</p>
                     <div class="flex items-center border-b-2 border-gray-800 pb-1">
                         <span class="res-text-total text-2xl font-bold mr-2">¥</span>
-                        <input type="text" id="grandTotalHeader" class="res-text-total text-3xl font-bold w-full bg-transparent border-none outline-none text-right" value="0">
+                        <!-- 手打ちでカンマが自動付与されるように oninput を追加、スマホ用に inputmode="numeric" を設定 -->
+                        <input type="text" id="grandTotalHeader" inputmode="numeric" class="res-text-total text-3xl font-bold w-full bg-transparent border-none outline-none text-right" value="0" oninput="formatInputWithComma(this)">
                         <span class="res-text-total text-xl font-bold ml-2">-</span>
                     </div>
                 </div>
@@ -323,20 +324,16 @@
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             </div>
-            <!-- データリスト領域 -->
             <div id="savedDataList" class="overflow-y-auto flex-grow bg-gray-50 border border-gray-200 rounded p-2">
-                <!-- Javascriptでデータが入ります -->
             </div>
         </div>
     </div>
 
-    <!-- ここからシステム側の処理（クラウド連携のためにモジュール化しています） -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Firebase 初期化処理 ---
         const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : "{}";
         const firebaseConfig = JSON.parse(firebaseConfigStr);
         let app, auth, db;
@@ -372,7 +369,6 @@
             });
         }
 
-        // --- 基本機能（グローバル関数に紐付け） ---
         let currentDocType = '見積書';
 
         window.showToast = (msg) => {
@@ -423,6 +419,21 @@
             });
         };
 
+        // --- 【追加】手入力した金額にカンマを自動で付ける関数 ---
+        window.formatInputWithComma = (inputElement) => {
+            // 数字以外の文字を削除
+            let value = inputElement.value.replace(/[^\d]/g, '');
+            
+            if (value === "") {
+                inputElement.value = "";
+                return;
+            }
+            
+            // 3桁ごとにカンマを入れる
+            let num = parseInt(value, 10);
+            inputElement.value = num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        };
+
         window.createRowHTML = () => {
             return `
                 <tr class="item-row group border-b border-gray-800">
@@ -442,7 +453,8 @@
                     </td>
                     <td data-label="単価" class="border-r border-gray-800 p-0 relative">
                         <span class="yen-mark absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 no-print text-xs">¥</span>
-                        <input type="number" class="price w-full h-full p-2 pl-6 border-none outline-none text-right bg-transparent" min="0" step="100" placeholder="0" oninput="calculate()">
+                        <!-- 【変更】単価欄もtype="text"にして、入力時にカンマが自動付与されるように変更 -->
+                        <input type="text" inputmode="numeric" class="price w-full h-full p-2 pl-6 border-none outline-none text-right bg-transparent" placeholder="0" oninput="formatInputWithComma(this); calculate();">
                     </td>
                     <td data-label="金額" class="p-2 text-right bg-transparent font-normal border-t-0">
                         ¥ <span class="row-total font-mono text-gray-800">0</span>
@@ -471,7 +483,10 @@
             let subTotal = 0;
             document.querySelectorAll('.item-row').forEach(row => {
                 const qty = parseFloat(row.querySelector('.qty').value) || 0;
-                const price = parseFloat(row.querySelector('.price').value) || 0;
+                // 【追加】入力欄にカンマが含まれている場合、計算前にカンマを除去して数値化する
+                const priceStr = row.querySelector('.price').value.replace(/,/g, '');
+                const price = parseFloat(priceStr) || 0;
+                
                 const rowTotal = Math.floor(qty * price);
                 row.querySelector('.row-total').textContent = formatNumber(rowTotal);
                 subTotal += rowTotal;
@@ -532,10 +547,10 @@
             await new Promise(resolve => setTimeout(resolve, 500));
 
             const opt = {
-                margin:       [10, 0, 10, 0],
+                margin:       0, 
                 filename:     `${currentDocType}_あいのて_${document.getElementById('documentNo').value}.pdf`,
                 image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, windowWidth: 850, width: 850, scrollY: 0, scrollX: 0 }, 
+                html2canvas:  { scale: 2, useCORS: true, windowWidth: 794, width: 794, scrollY: 0, scrollX: 0 }, 
                 jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
@@ -566,9 +581,6 @@
             }
         };
 
-        // --- クラウド保存と読み込み機能 ---
-        
-        // データの保存
         window.saveData = async () => {
             if (!currentUserId) {
                 window.showToast("システム接続中です。数秒待ってからお試しください。");
@@ -581,7 +593,6 @@
                 return;
             }
 
-            // 保存状態が分かるようにローディングを少し表示
             const overlay = document.getElementById('loadingOverlay');
             overlay.classList.remove('hidden');
             overlay.classList.add('flex');
@@ -607,7 +618,6 @@
             });
 
             try {
-                // クラウド(Firestore)に書き込み。Noをキーにするので同じNoなら上書きされる
                 const docRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'estimates', docNo);
                 await setDoc(docRef, data);
                 window.showToast("データをクラウドに保存しました！");
@@ -620,7 +630,6 @@
             }
         };
 
-        // 読込モーダル表示
         window.showLoadModal = async () => {
             if (!currentUserId) {
                 window.showToast("システム接続中です。数秒待ってからお試しください。");
@@ -635,7 +644,6 @@
             modal.classList.add('flex');
             
             try {
-                // クラウドから全データを取得
                 const colRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'estimates');
                 const snapshot = await getDocs(colRef);
                 
@@ -644,7 +652,6 @@
                     docs.push({ id: doc.id, ...doc.data() });
                 });
                 
-                // 新しい順に並び替え
                 docs.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
                 
                 if (docs.length === 0) {
@@ -654,11 +661,8 @@
                 
                 listContainer.innerHTML = '';
                 docs.forEach(data => {
-                    // 日本語の日付フォーマットに変換
                     const dateObj = new Date(data.updatedAt);
                     const dateStr = `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
-                    
-                    // JSON化して渡すためにエスケープ
                     const jsonStr = JSON.stringify(data).replace(/'/g, "&apos;").replace(/"/g, "&quot;");
 
                     const itemHtml = `
@@ -694,21 +698,17 @@
         window.loadDataById = (jsonStr) => {
             const data = JSON.parse(jsonStr.replace(/&apos;/g, "'").replace(/&quot;/g, '"'));
 
-            // 行をクリア
             const tbody = document.getElementById('invoiceItems');
             tbody.innerHTML = '';
             
-            // タブ状態を復元
             window.changeDocType(data.docType || '見積書');
             
-            // 基本情報を復元
             document.getElementById('customerName').value = data.customerName || '';
             document.getElementById('issueDate').value = data.issueDate || '';
             document.getElementById('documentNo').value = data.documentNo || '';
             document.getElementById('grandTotalHeader').value = data.grandTotal || '0';
             document.getElementById('remarks').value = data.remarks || '';
             
-            // 明細を復元
             if (data.items && data.items.length > 0) {
                 data.items.forEach(item => {
                     window.addRow();
@@ -729,13 +729,11 @@
 
         window.deleteSavedData = async (docId) => {
             if (!currentUserId) return;
-            // 削除確認
             if(!confirm("この保存データを完全に削除しますか？")) return;
 
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUserId, 'estimates', docId));
                 window.showToast("データを削除しました");
-                // リストを再描画
                 window.showLoadModal();
             } catch (e) {
                 console.error(e);
@@ -743,7 +741,6 @@
             }
         };
 
-        // --- 初回ロード時のセットアップ ---
         const initApp = () => {
             document.getElementById('issueDate').valueAsDate = new Date();
             window.setDefaultDocumentNo();
@@ -758,11 +755,11 @@
             document.body.appendChild(datalist);
 
             const defaultItems = [
-                { name: "作業スタッフ（基本料金）", qty: 2, unit: "人", price: 3000 },
-                { name: "作業費（追加時間）", qty: 4, unit: "時間", price: 2500 },
-                { name: "車両費（軽トラ）", qty: 1, unit: "台", price: 5000 },
-                { name: "不用品処分代行費", qty: 1, unit: "式", price: 8000 },
-                { name: "出張費（福井市内）", qty: 1, unit: "式", price: 2000 }
+                { name: "作業スタッフ（基本料金）", qty: 2, unit: "人", price: "3,000" },
+                { name: "作業費（追加時間）", qty: 4, unit: "時間", price: "2,500" },
+                { name: "車両費（軽トラ）", qty: 1, unit: "台", price: "5,000" },
+                { name: "不用品処分代行費", qty: 1, unit: "式", price: "8,000" },
+                { name: "出張費（福井市内）", qty: 1, unit: "式", price: "2,000" }
             ];
 
             const tbody = document.getElementById('invoiceItems');
@@ -777,7 +774,6 @@
             window.calculate();
         };
 
-        // DOM構築完了後に実行
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initApp);
         } else {
